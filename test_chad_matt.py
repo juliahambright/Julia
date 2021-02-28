@@ -32,15 +32,17 @@ vehicle = connect(connection_string, wait_ready=True)
 
 #----------------------------dronekit functions----------------------------
 def arm_and_takeoff():
-    print("Arming motors")
+    print("Arming motors--2 sec wait")
+
+    time.sleep(2)
 
     # wating for vehicle to be armable
-    while not vehicle.is_armable:
-        time.sleep(1)
+    #while not vehicle.is_armable:
+        #time.sleep(1)
 
     # once armable vehile set to GUIDED mode
     vehicle.mode = VehicleMode("GUIDED")
-    print("--Bot in Guided Mode--")
+    print("--Bot Mode-- %s" %vehicle.mode)
 
     # write True to arm the vehicle
     vehicle.armed = True
@@ -48,31 +50,8 @@ def arm_and_takeoff():
     # if not armed wait
     while not vehicle.armed: time.sleep(1)
 
-    print("Takeoff")
-
-def get_lat(i):
-    print(">>Getting new lat for obstacle")
-    currentLat = vehicle.location.global_frame.lat # current Lat from bot
-    if i % 2 == 0:
-        newLat = currentLat - 0.0002 # creating new lat
-    else:
-        newLat = currentLat + 0.0001 # creating new lat
-    #print("New Latitude: ", newLat)
-    return newLat
-
-
-# this function will represent getting a new longitude for the bot to go to when obstacle
-def get_long(i):
-    print(">>Getting new long for obstacle")
-    currentLon = vehicle.location.global_frame.lon # current lon from bot
-    #print("i = ", i)
-    if i % 2 == 0:
-        newLong = currentLon + 0.00002 # creating new lon
-    else:
-        newLong = currentLon - 0.0002 # creating new lon
-    #print("New Longitude: ", newLong)
-    return newLong
-
+    print(vehicle.mode)
+    print("Vehicle Armed: %s"%vehicle.armed)
 
 def get_distance_metres(aLocation1, aLocation2):
     """
@@ -118,14 +97,17 @@ def get_lat2_lon2(currentLat, currentLon, dist, theta):
 #----------------------------Main Program----------------------------
 #dronekit setup
 
-arm_and_takeoff()
+arm_and_takeoff(0)
 
 #set default speed
-vehicle.groundspeed = 3
-gndSpeed = 3
+vehicle.groundspeed = 1
 
-print("^^Setting Launch Location to Current Coordinates^^\n")
+print("^^Setting Launch Location to Current Coordinates^^ -- wait 3 secs \n")
 vehicle.home_location = vehicle.location.global_frame
+
+print("Home Current Location %s" % vehicle.location.global_frame)
+time.sleep(3)
+
 
  # starting mission to destination 
 ## edit to right lat and long variables: print('Going to Coordinates: ' + str(lat) + ", " + str(long))
@@ -134,17 +116,33 @@ vehicle.home_location = vehicle.location.global_frame
 # functions I want vehicle.simple_goto(wp2),how drone understands waypoint= LocationGlobalRelative(newLat, newLong, 10)
 
 next_loc = vehicle.location.global_frame
-
+print("Next Location: %s" % next_loc)
 j = 0
 
 #waypoint tree that saves the lists of waypoints detected in each locations by the lidar
 wptree = {}
 
 final_loc =  LocationGlobalRelative(finalLat, finalLong, 10)
+print("Final Location: %s" % final_loc)
 
-if distance_to_current_waypoint(final_loc)>2:
+x = time.time()
+while distance_to_current_waypoint(final_loc)>2:
+    elapsed = time.time() - x
+    if elapsed > 20:
+        break
+    print("Distance to Final WP: %s" % distance_to_current_waypoint(final_loc))
+    if distance_to_current_waypoint(next_loc)<2:
+        elapsed = time.time() - x
+        if elapsed > 20:
+            break
+        print("--Bot Mode-- %s" %vehicle.mode)
+        while not vehicle.mode == "HOLD":
+            vehicle.mode = VehicleMode("HOLD")
+            time.sleep(1)
+        print("--Bot Mode while getting next WP-- %s" %vehicle.mode)
 
-    while(distance_to_current_waypoint(next_loc)<2):
+        print("Distance to Next WP: %s" % distance_to_current_waypoint(next_loc))
+        print("<<<<<<<---------- Finding Next WP -------->>>>>>>")
         proc = subprocess.Popen(
             ["./ultra_simple"," /dev/ttyUSB0"],
             stderr=subprocess.STDOUT,  # Merge stdout and stderr
@@ -176,18 +174,43 @@ if distance_to_current_waypoint(final_loc)>2:
             nextLon = list[1]
 
             #sets next_loc to the next waypoint in a way that the pixhawks can understand
-            next_loc = LocationGlobalRelative(nextLat, nextLong, 10)
+            next_loc = LocationGlobalRelative(nextLat, nextLong, 0)
+            print("Next Waypoint: %s" % next_loc)
             j=j+1
+
+            print("WP Tree is Below")
             print(wptree)
+            print("\n")
 
+
+            print("--Bot Mode-- %s" %vehicle.mode)
+            while not vehicle.mode == "GUIDED":
+                vehicle.mode = VehicleMode("GUIDED")
+                time.sleep(1)
+            print("--Bot Mode before going to next WP-- %s" %vehicle.mode)
+
+            print("Going to next Waypoint: %s" % next_loc)
             vehicle.simple_goto(next_loc)
+    else:
+        time.sleep(1)
     
-else:
-    print("Arrived at Destination")
 
+print("--Bot Mode-- %s" %vehicle.mode)
+while not vehicle.mode == "HOLD":
+    vehicle.mode = VehicleMode("HOLD")
+    time.sleep(1)
+print("--Bot Mode before Close-- %s" %vehicle.mode)
 
+vehicle.armed = False
+    # if armed wait
+    while vehicle.armed: 
+        time.sleep(1)
+        vehicle.armed = False
 
-
+print("Vehicle Armed: %s" % vehicle.armed)
+vehicle.close()
+print("Vehicle Closed -- Mission Over")
+time.sleep(5)
 
 
 #result = subprocess.run(["./ultra_simple"," /dev/ttyUSB0"], stdout=PIPE, stderr=PIPE)
